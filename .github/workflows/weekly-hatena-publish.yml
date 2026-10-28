@@ -1,0 +1,32 @@
+name: Weekly PC Support Hatena Post
+
+on:
+  schedule:
+    - cron: "0 1 * * 4" # Thursday 10:00 JST (GitHub Actions uses UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pc-support-hatena-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Generate and publish weekly article
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HATENA_USER_ID: ${{ secrets.HATENA_USER_ID }}
+          HATENA_API_KEY: ${{ secrets.HATENA_API_KEY }}
+          HATENA_PC_BLOG_ID: ${{ secrets.HATENA_PC_BLOG_ID }}
+        run: node scripts/publish-weekly-hatena.mjs
