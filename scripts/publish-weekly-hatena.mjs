@@ -43,7 +43,16 @@ const decodeXml = (value) =>
     .replaceAll("&apos;", "'")
     .replaceAll("&amp;", "&");
 
-function getJstDate() {
+function formatAsHtml(body) {
+    return String(body || "")
+      .trim()
+      .split(/\n\s*\n+/)
+      .filter(Boolean)
+      .map((paragraph) => "<p>" + escapeXml(paragraph.trim()).replace(/\n/g, "<br>") + "</p>")
+      .join("\n");
+    }
+
+    function getJstDate() {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -217,8 +226,8 @@ async function publish(article) {
     '<entry xmlns="http://www.w3.org/2005/Atom">' +
     "<title>" +
     escapeXml(article.title) +
-    '</title><content type="text/plain">' +
-    escapeXml(article.body) +
+    '</title><content type="text/html">' +
+    escapeXml(formatAsHtml(article.body)) +
     "</content>" +
     categories +
     "</entry>";
@@ -236,8 +245,49 @@ async function publish(article) {
   return posted.headers.get("location");
 }
 
-async function main() {
-  const date = getJstDate();
+async function updatePublishedArticle(article) {
+    const blogId = process.env.HATENA_PC_BLOG_ID.trim();
+    const userId = process.env.HATENA_USER_ID.trim();
+    const endpoint = "https://blog.hatena.ne.jp/" + encodeURIComponent(userId) + "/" + encodeURIComponent(blogId) + "/atom/entry";
+    const authorization = "Basic " + Buffer.from(userId + ":" + process.env.HATENA_API_KEY.trim()).toString("base64");
+    const response = await fetch(endpoint, { headers: { Accept: "application/atom+xml", Authorization: authorization }, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error("Hatena article lookup failed: HTTP " + response.status);
+    const xml = await response.text();
+    if (!/<feed\b/i.test(xml)) throw new Error("Hatena feed could not be parsed; refusing to edit");
+    const entry = [...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry\s*>/gi)].map((match) => match[1]).find((item) => {
+      const rawTitle = item.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1];
+      return rawTitle && safeTitle(decodeXml(rawTitle)) === safeTitle(article.title);
+    });
+    if (!entry) throw new Error("Published article title was not found; refusing to create a new post");
+    const links = [...entry.matchAll(/<link\b([^>]*)\/?\s*>/gi)].map((match) => ({ rel: match[1].match(/\brel=["']([^"']+)["']/i)?.[1], href: match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] }));
+    const editLink = links.find((link) => link.rel === "edit" && link.href)?.href;
+    const publicUrl = links.find((link) => link.rel === "alternate" && link.href)?.href;
+    if (!editLink) throw new Error("Hatena edit link was not found; refusing to edit");
+    const editUrl = new URL(decodeXml(editLink));
+    const expectedPath = new URL(endpoint).pathname + "/";
+    if (editUrl.protocol !== "https:" || editUrl.hostname !== "blog.hatena.ne.jp" || !editUrl.pathname.startsWith(expectedPath)) throw new Error("Hatena returned an unexpected edit URL; refusing to edit");
+    const categories = (article.tags || []).map((tag) => '<category term="' + escapeXml(tag) + '" />').join("");
+    const body = '<?xml version="1.0" encoding="utf-8"?><entry xmlns="http://www.w3.org/2005/Atom"><title>' + escapeXml(article.title) + '</title><content type="text/html">' + escapeXml(formatAsHtml(article.body)) + '</content>' + categories + '</entry>';
+    const updated = await fetch(editUrl, { method: "PUT", headers: { Accept: "application/atom+xml", Authorization: authorization, "Content-Type": "application/atom+xml; charset=utf-8" }, body, signal: AbortSignal.timeout(20000) });
+    if (!updated.ok) throw new Error("Hatena article formatting update failed: HTTP " + updated.status);
+    return publicUrl ? decodeXml(publicUrl) : null;
+    }
+
+    async function main() {
+    const formatRequestPath = "format-request.json";
+    let formatRequest;
+    try { formatRequest = JSON.parse(await fs.readFile(formatRequestPath, "utf8")); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    if (formatRequest) {
+      if (formatRequest.action !== "format_existing" || !/^\d{4}-\d{2}-\d{2}$/.test(formatRequest.date)) throw new Error("Invalid format request; refusing to publish or edit");
+      const article = JSON.parse(await fs.readFile(path.join("articles", formatRequest.date + ".json"), "utf8"));
+      const url = await updatePublishedArticle(article);
+      await fs.rm(formatRequestPath);
+      commit([formatRequestPath], "Format published Hatena article " + formatRequest.date);
+      console.log("Formatted published article " + formatRequest.date + ": " + (url || "URL unavailable"));
+      return;
+    }
+    const date = getJstDate();
   const articlePath = path.join("articles", date + ".json");
   const statusPath = path.join("publishing-status", date + ".json");
   const latestPath = path.join("publishing-status", "latest.json");
