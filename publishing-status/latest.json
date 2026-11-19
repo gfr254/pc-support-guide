@@ -1,8 +1,8 @@
 {
-  "date": "2026-11-12",
-  "status": "published",
-  "title": "PCの設定を安全に確認する方法",
-  "url": "https://blog.hatena.ne.jp/beetle_life_jp_blog/pc-komarigoto-guide.hatenablog.com/atom/entry/14729835035337319020",
-  "publishedAt": "2026-11-12T07:58:00.075Z",
-  "error": null
+  "date": "2026-11-19",
+  "status": "failed",
+  "title": "PCの設定変更前に確認すべきポイント",
+  "url": null,
+  "publishedAt": null,
+  "error": "An article with this title already exists; refusing duplicate publish"
 }
