@@ -1,8 +1,8 @@
 {
-  "date": "2026-11-19",
-  "status": "failed",
-  "title": "PCの設定変更前に確認すべきポイント",
-  "url": null,
-  "publishedAt": null,
-  "error": "An article with this title already exists; refusing duplicate publish"
+  "date": "2026-11-23",
+  "status": "published",
+  "title": "【2026-W48】PCの設定変更前に確認すべきポイント",
+  "url": "https://blog.hatena.ne.jp/beetle_life_jp_blog/pc-komarigoto-guide.hatenablog.com/atom/entry/14729835035342819135",
+  "publishedAt": "2026-11-23T05:23:25.200Z",
+  "error": null
 }
